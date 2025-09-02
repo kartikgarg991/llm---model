@@ -1,0 +1,12 @@
+langchain
+langchain-community
+langchain-google-genai
+langchain-pinecone
+pinecone-client # new added
+pinecone
+pypdf
+python-dotenv
+google-genai # new -added 
+
+# Added for web hosting
+streamlit>=1.28.0 #ew fpr app.py
