@@ -9,11 +9,10 @@ from langchain_pinecone import PineconeVectorStore
 load_dotenv()
 
 
-
 def index_document():
 
     # --- step 1 : pdf upload 
-    PDF_PATH = "bert_paper.pdf"
+    PDF_PATH = "kartik.pdf"
     pdf_loader = PyPDFLoader(PDF_PATH)
     raw_docs = pdf_loader.load()
     print(f"Total documents extracted: {len(raw_docs)}")
@@ -53,31 +52,3 @@ def index_document():
     print("✅ Documents pushed to Pinecone (minimal flow)")
 
 index_document()
-
-
-# import os
-# from langchain_community.document_loaders import PyPDFLoader
-# from langchain.text_splitter import RecursiveCharacterTextSplitter
-# from langchain_google_genai import GoogleGenerativeAIEmbeddings
-# from pinecone import Pinecone
-# from langchain_pinecone import PineconeVectorStore
-
-def index_document(file_path: str, filename: str):
-    # load PDF
-    loader = PyPDFLoader(file_path)
-    docs = loader.load()
-
-    # split into chunks
-    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
-    splits = splitter.split_documents(docs)
-
-    # embeddings
-    embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
-
-    # pinecone
-    pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
-    index_name = os.getenv("PINECONE_INDEX_NAME")
-    vectorstore = PineconeVectorStore.from_documents(
-        splits, embeddings, index_name=index_name
-    )
-    print(f"Indexed {filename} into {index_name}")

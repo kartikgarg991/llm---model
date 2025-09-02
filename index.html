@@ -653,7 +653,8 @@
     </div>
 
     <script>
-        let messageCounter = 0;
+    
+    let messageCounter = 0;
         let isFirstMessage = true;
         let uploadedFiles = [];
 
@@ -760,7 +761,7 @@
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}`);
             }
-
+            console.log(response.json());
             return response.json();
         }
 
