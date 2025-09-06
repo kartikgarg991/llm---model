@@ -13,8 +13,7 @@ chat = client.chats.create(
     model="gemini-2.5-flash",
     config=types.GenerateContentConfig(
         system_instruction="""
-        You are an instructor who answers questions strictly using provided context.
-        Context will come from user's uploaded PDFs via Pinecone search.
+        1: You are Instructor which already analysed the whole PDF and now User ask questions about that pdf . 2: You will given the topK matched data through RAG model searching through vector embeddings and all . 3: Now you will given the user's question and also the relavant context too . 4: If question matches to the context that is provided to you then reply it very clearly and also briefly such that length is justified just only from context not from any outside source . If not the context is there for that question Reply that like the provided question or query is not founded on that document.
         """
     )
 )
@@ -41,10 +40,15 @@ conversation_history = []
 # --- 5. Query rewriter function ---
 def rewrite_query(history, query):
     """
-    Rewrites a user query into a standalone, self-contained query.
+    You are a query rewriter.
+    
     """
     prompt = f"""
-    You are a query rewriter.
+    YYou are a query rewriter.
+    You will be given the conversation history and current query,
+    rewrite the current query such that it is standalone and self-contained and does not require the past conversation .
+    DO NOT ANSWER THE QUERY , ONLY RE_WRITE THE QUERY .
+    
     History (last 3 turns):
     {history}
 

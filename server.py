@@ -1,14 +1,10 @@
 from dotenv import load_dotenv
 load_dotenv()
-
-
 from flask import Flask, request, jsonify, render_template
 from werkzeug.utils import secure_filename
 import os
 from index import index_document
 from query import chat, embeddings, pinecone_index, rewrite_query, conversation_history
-
-
 
 
 app = Flask(__name__)
@@ -60,7 +56,7 @@ def ask():
         return jsonify({"error": "No query"}), 400
 
     # Rewrite query
-    prev_conv = "\n".join(conversation_history[-3:])
+    prev_conv = "\n".join(conversation_history[-5:])
     std_query = rewrite_query(prev_conv, query)
 
     # Get vector & query Pinecone
@@ -69,23 +65,28 @@ def ask():
     matches = raw_results["matches"]
 
     if not matches:
-        answer = "No relevant content found in the document."
+        answer = "Sorry, I couldn't find anything in the document for that query."
     else:
         context = "\n\n---\n\n".join([m["metadata"]["text"] for m in matches])
         prompt = f"""
         You are an instructor who answers only from the given context.
-        Previous Conversation (last 3 turns):
+        
+        Previous Conversation (last 5 turns):
         {prev_conv}
-        User Query: {std_query}
-        Context:
+
+        User Query: 
+        {std_query}
+
+        Context (from document):
         {context}
+
         Answer strictly using ONLY the context above. If not relevant, say 'No relevant content found in the document.'
         """
         answer = chat.send_message(prompt).text
 
     # Update conversation history
     conversation_history.append(f"User: {query}\nAssistant: {answer}")
-    conversation_history[:] = conversation_history[-3:]
+    conversation_history[:] = conversation_history[-5:]
 
     return jsonify({"answer": answer})
 
