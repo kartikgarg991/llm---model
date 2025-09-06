@@ -591,12 +591,15 @@
             <div class="logo-icon">AI</div>
             <h1>PDF Analyzer</h1>
         </div>
+
         <div class="header-actions">
             <div class="upload-button" id="headerUpload">
-                <span>📁</span>
-                <span>Upload PDF</span>
-                <input type="file" accept=".pdf" multiple onchange="handleFileUpload(event)">
-            </div>
+            <span>📁</span>
+            <span>Upload PDF</span>
+            <!-- Added name="file" and onchange handler -->
+            <input type="file" accept=".pdf" name="file" onchange="handleFileUpload(event)">
+        </div>
+            
             <div class="status-bar">
                 <div class="status-dot" id="statusDot"></div>
                 <span id="statusText">Ready</span>
@@ -611,6 +614,7 @@
     <div class="chat-area">
         <div class="chat-container" id="chatContainer">
             <div class="welcome-screen" id="welcomeScreen">
+
                 <div class="welcome-icon">📄</div>
                 <div class="welcome-title">Welcome to PDF Analyzer</div>
                 <div class="welcome-subtitle">
@@ -618,12 +622,14 @@
                 </div>
                 
                 <div class="welcome-upload" id="welcomeUpload">
-                    <input type="file" accept=".pdf" multiple onchange="handleFileUpload(event)">
-                    <div class="upload-content">
-                        <div class="upload-icon">⬆️</div>
-                        <div class="upload-text">Drop PDF files here</div>
-                        <div class="upload-hint">or click to browse</div>
-                    </div>
+    <!-- Added name="file" and onchange handler -->
+            <input type="file" accept=".pdf" name="file" onchange="handleFileUpload(event)">
+            <div class="upload-content">
+                <div class="upload-icon">⬆️</div>
+                <div class="upload-text">Drop PDF files here</div>
+                <div class="upload-hint">or click to browse</div>
+            </div>
+
                     <div class="progress-bar" id="progressBar">
                         <div class="progress-fill" id="progressFill"></div>
                     </div>
@@ -635,6 +641,7 @@
         <div class="input-area">
             <div class="input-container">
                 <div class="input-wrapper" id="inputWrapper">
+                    
                     <textarea 
                         id="query" 
                         placeholder="Ask anything about your PDF documents..."
@@ -652,332 +659,344 @@
         </div>
     </div>
 
-    <script>
-    
+   <script>
     let messageCounter = 0;
-        let isFirstMessage = true;
-        let uploadedFiles = [];
+    let isFirstMessage = true;
+    let uploadedFiles = [];
+    let sessionId = null;
 
-        // Initialize drag and drop
-        function initDragDrop() {
-            const welcomeUpload = document.getElementById('welcomeUpload');
-            
-            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
-                welcomeUpload.addEventListener(eventName, preventDefaults, false);
-                document.body.addEventListener(eventName, preventDefaults, false);
-            });
+    // Initialize drag and drop
+    function initDragDrop() {
+        const welcomeUpload = document.getElementById('welcomeUpload');
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            welcomeUpload.addEventListener(eventName, preventDefaults, false);
+            document.body.addEventListener(eventName, preventDefaults, false);
+        });
+        ['dragenter', 'dragover'].forEach(eventName => {
+            welcomeUpload.addEventListener(eventName, highlight, false);
+        });
+        ['dragleave', 'drop'].forEach(eventName => {
+            welcomeUpload.addEventListener(eventName, unhighlight, false);
+        });
+        welcomeUpload.addEventListener('drop', handleDrop, false);
+    }
 
-            ['dragenter', 'dragover'].forEach(eventName => {
-                welcomeUpload.addEventListener(eventName, highlight, false);
-            });
+    function preventDefaults(e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
 
-            ['dragleave', 'drop'].forEach(eventName => {
-                welcomeUpload.addEventListener(eventName, unhighlight, false);
-            });
+    function highlight(e) {
+        document.getElementById('welcomeUpload').classList.add('dragover');
+    }
 
-            welcomeUpload.addEventListener('drop', handleDrop, false);
+    function unhighlight(e) {
+        document.getElementById('welcomeUpload').classList.remove('dragover');
+    }
+
+    function handleDrop(e) {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        handleFiles(files);
+    }
+
+    function handleFileUpload(event) {
+        const files = event.target.files;
+        handleFiles(files);
+    }
+
+    async function handleFiles(files) {
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        const progressBar = document.getElementById('progressBar');
+        const progressFill = document.getElementById('progressFill');
+
+        // Improved PDF file filtering
+        const pdfFiles = Array.from(files).filter(file =>
+            file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
+        );
+
+        if (pdfFiles.length === 0) {
+            updateStatus('error', 'Please select PDF files only');
+            return;
         }
 
-        function preventDefaults(e) {
-            e.preventDefault();
-            e.stopPropagation();
-        }
+        // Show progress bar
+        progressBar.style.display = 'block';
+        updateStatus('uploading', 'Uploading files...');
 
-        function highlight(e) {
-            document.getElementById('welcomeUpload').classList.add('dragover');
-        }
+        for (let i = 0; i < pdfFiles.length; i++) {
+            const file = pdfFiles[i];
+            const progress = ((i + 1) / pdfFiles.length) * 100;
+            progressFill.style.width = progress + '%';
 
-        function unhighlight(e) {
-            document.getElementById('welcomeUpload').classList.remove('dragover');
-        }
-
-        function handleDrop(e) {
-            const dt = e.dataTransfer;
-            const files = dt.files;
-            handleFiles(files);
-        }
-
-        function handleFileUpload(event) {
-            const files = event.target.files;
-            handleFiles(files);
-        }
-
-        async function handleFiles(files) {
-            const statusDot = document.getElementById('statusDot');
-            const statusText = document.getElementById('statusText');
-            const progressBar = document.getElementById('progressBar');
-            const progressFill = document.getElementById('progressFill');
-
-            // Filter PDF files
-            const pdfFiles = Array.from(files).filter(file => file.type === 'application/pdf');
-            
-            if (pdfFiles.length === 0) {
-                updateStatus('error', 'Please select PDF files only');
+            try {
+                await uploadFile(file);
+                uploadedFiles.push({
+                    name: file.name,
+                    size: file.size,
+                    uploadedAt: new Date()
+                });
+            } catch (error) {
+                updateStatus('error', `Failed to upload ${file.name}`);
                 return;
             }
-
-            // Show progress bar
-            progressBar.style.display = 'block';
-            updateStatus('uploading', 'Uploading files...');
-
-            for (let i = 0; i < pdfFiles.length; i++) {
-                const file = pdfFiles[i];
-                const progress = ((i + 1) / pdfFiles.length) * 100;
-                progressFill.style.width = progress + '%';
-
-                try {
-                    await uploadFile(file);
-                    uploadedFiles.push({
-                        name: file.name,
-                        size: file.size,
-                        uploadedAt: new Date()
-                    });
-                } catch (error) {
-                    console.error('Upload failed for', file.name, error);
-                    updateStatus('error', `Failed to upload ${file.name}`);
-                    return;
-                }
-            }
-
-            // Hide progress bar and update UI
-            setTimeout(() => {
-                progressBar.style.display = 'none';
-                progressFill.style.width = '0%';
-                updateFileList();
-                enableChat();
-                updateStatus('ready', `${uploadedFiles.length} file(s) ready`);
-            }, 500);
         }
 
-        async function uploadFile(file) {
-            const formData = new FormData();
-            formData.append('file', file);
+        // Hide progress bar and update UI
+        setTimeout(() => {
+            progressBar.style.display = 'none';
+            progressFill.style.width = '0%';
+            updateFileList();
+            enableChat();
+            updateStatus('ready', `${uploadedFiles.length} file(s) ready`);
+        }, 500);
+    }
 
-            const response = await fetch('http://127.0.0.1:5000/upload', {
+    async function uploadFile(file) {
+        const formData = new FormData();
+        formData.append('file', file);
+        const response = await fetch('/upload', {
+            method: 'POST',
+            body: formData
+        });
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || `HTTP ${response.status}`);
+        }
+        const result = await response.json();
+        return result;
+    }
+
+    function updateFileList() {
+        const uploadedFilesContainer = document.getElementById('uploadedFiles');
+        if (uploadedFiles.length > 0) {
+            uploadedFilesContainer.style.display = 'flex';
+            uploadedFilesContainer.innerHTML = uploadedFiles.map((file, index) => `
+                <div class="file-chip">
+                    <span>📄 ${file.name}</span>
+                    <button class="remove-file" onclick="removeFile(${index})">×</button>
+                </div>
+            `).join('');
+        } else {
+            uploadedFilesContainer.style.display = 'none';
+        }
+    }
+
+    function removeFile(index) {
+        uploadedFiles.splice(index, 1);
+        updateFileList();
+        if (uploadedFiles.length === 0) {
+            disableChat();
+            updateStatus('ready', 'Ready');
+        } else {
+            updateStatus('ready', `${uploadedFiles.length} file(s) ready`);
+        }
+    }
+
+    function enableChat() {
+        const queryInput = document.getElementById('query');
+        const sendButton = document.getElementById('sendButton');
+        const inputWrapper = document.getElementById('inputWrapper');
+        queryInput.disabled = false;
+        sendButton.disabled = false;
+        inputWrapper.classList.remove('disabled');
+        queryInput.placeholder = "Ask anything about your PDF documents...";
+    }
+
+    function disableChat() {
+        const queryInput = document.getElementById('query');
+        const sendButton = document.getElementById('sendButton');
+        const inputWrapper = document.getElementById('inputWrapper');
+        queryInput.disabled = true;
+        sendButton.disabled = true;
+        inputWrapper.classList.add('disabled');
+        queryInput.placeholder = "Upload PDF files to start chatting...";
+    }
+
+    function updateStatus(type, text) {
+        const statusDot = document.getElementById('statusDot');
+        const statusText = document.getElementById('statusText');
+        statusDot.className = 'status-dot';
+        if (type !== 'ready') {
+            statusDot.classList.add(type);
+        }
+        statusText.textContent = text;
+    }
+
+    function autoResize(textarea) {
+        textarea.style.height = 'auto';
+        textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
+    }
+
+    function handleKeyPress(event) {
+        if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            sendQuery();
+        }
+    }
+
+    async function sendQuery() {
+        const queryInput = document.getElementById('query');
+        const sendButton = document.getElementById('sendButton');
+        const buttonText = document.getElementById('buttonText');
+        const buttonIcon = document.getElementById('buttonIcon');
+        const message = queryInput.value.trim();
+
+        if (!message || sendButton.disabled || uploadedFiles.length === 0) return;
+
+        // Show messages container if first message
+        if (isFirstMessage) {
+            document.getElementById('welcomeScreen').style.display = 'none';
+            document.getElementById('messages').style.display = 'flex';
+            isFirstMessage = false;
+        }
+
+        // Disable send button
+        sendButton.disabled = true;
+        buttonText.textContent = 'Sending';
+        buttonIcon.textContent = '⟳';
+        updateStatus('uploading', 'Processing...');
+
+        // Add user message
+        addMessage('user', message);
+        queryInput.value = '';
+        queryInput.style.height = 'auto';
+
+        // Add typing indicator
+        const typingId = addTypingMessage();
+
+        try {
+            const requestBody = { query: message };
+            if (sessionId) {
+                requestBody.session_id = sessionId;
+            }
+            const response = await fetch('/ask', {
                 method: 'POST',
-                body: formData
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestBody)
             });
 
             if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
+                const errorData = await response.json();
+                throw new Error(errorData.error || `HTTP ${response.status}`);
             }
-            console.log(response.json());
-            return response.json();
-        }
 
-        function updateFileList() {
-            const uploadedFilesContainer = document.getElementById('uploadedFiles');
-            
-            if (uploadedFiles.length > 0) {
-                uploadedFilesContainer.style.display = 'flex';
-                uploadedFilesContainer.innerHTML = uploadedFiles.map((file, index) => `
-                    <div class="file-chip">
-                        <span>📄 ${file.name}</span>
-                        <button class="remove-file" onclick="removeFile(${index})">×</button>
-                    </div>
-                `).join('');
-            } else {
-                uploadedFilesContainer.style.display = 'none';
+            const data = await response.json();
+
+            // Store session ID for future requests
+            if (data.session_id) {
+                sessionId = data.session_id;
             }
-        }
 
-        function removeFile(index) {
-            uploadedFiles.splice(index, 1);
-            updateFileList();
-            
-            if (uploadedFiles.length === 0) {
-                disableChat();
-                updateStatus('ready', 'Ready');
-            } else {
-                updateStatus('ready', `${uploadedFiles.length} file(s) ready`);
-            }
-        }
+            // Remove typing indicator
+            removeMessage(typingId);
 
-        function enableChat() {
-            const queryInput = document.getElementById('query');
-            const sendButton = document.getElementById('sendButton');
-            const inputWrapper = document.getElementById('inputWrapper');
-            
-            queryInput.disabled = false;
+            // Add assistant response
+            addMessage('assistant', data.answer || 'No response received.');
+            updateStatus('ready', `${uploadedFiles.length} file(s) ready`);
+
+        } catch (error) {
+            removeMessage(typingId);
+            addMessage('assistant', `⚠️ ${error.message}`);
+            updateStatus('error', 'Query failed');
+        } finally {
+            // Re-enable send button
             sendButton.disabled = false;
-            inputWrapper.classList.remove('disabled');
-            queryInput.placeholder = "Ask anything about your PDF documents...";
+            buttonText.textContent = 'Send';
+            buttonIcon.textContent = '→';
         }
+    }
 
-        function disableChat() {
-            const queryInput = document.getElementById('query');
-            const sendButton = document.getElementById('sendButton');
-            const inputWrapper = document.getElementById('inputWrapper');
-            
-            queryInput.disabled = true;
-            sendButton.disabled = true;
-            inputWrapper.classList.add('disabled');
-            queryInput.placeholder = "Upload PDF files to start chatting...";
+    function addMessage(type, content) {
+        const messagesContainer = document.getElementById('messages');
+        const messageId = `msg-${++messageCounter}`;
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${type}`;
+        messageDiv.id = messageId;
+        const avatar = document.createElement('div');
+        avatar.className = 'message-avatar';
+        avatar.textContent = type === 'user' ? 'You' : 'AI';
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'message-content';
+        contentDiv.textContent = content;
+        const timeDiv = document.createElement('div');
+        timeDiv.className = 'message-time';
+        timeDiv.textContent = new Date().toLocaleTimeString([], {
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+        contentDiv.appendChild(timeDiv);
+        messageDiv.appendChild(avatar);
+        messageDiv.appendChild(contentDiv);
+        messagesContainer.appendChild(messageDiv);
+        // Scroll to bottom
+        document.getElementById('chatContainer').scrollTop =
+            document.getElementById('chatContainer').scrollHeight;
+        return messageId;
+    }
+
+    function addTypingMessage() {
+        const messagesContainer = document.getElementById('messages');
+        const messageId = `typing-${++messageCounter}`;
+        const messageDiv = document.createElement('div');
+        messageDiv.className = 'message assistant';
+        messageDiv.id = messageId;
+        const avatar = document.createElement('div');
+        avatar.className = 'message-avatar';
+        avatar.textContent = 'AI';
+        const contentDiv = document.createElement('div');
+        contentDiv.className = 'message-content';
+        const typingDiv = document.createElement('div');
+        typingDiv.className = 'typing-container';
+        typingDiv.innerHTML = `
+            <span>Analyzing</span>
+            <div class="typing-dots">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+        `;
+        contentDiv.appendChild(typingDiv);
+        messageDiv.appendChild(avatar);
+        messageDiv.appendChild(contentDiv);
+        messagesContainer.appendChild(messageDiv);
+        // Scroll to bottom
+        document.getElementById('chatContainer').scrollTop =
+            document.getElementById('chatContainer').scrollHeight;
+        return messageId;
+    }
+
+    function removeMessage(messageId) {
+        const message = document.getElementById(messageId);
+        if (message) {
+            message.remove();
         }
+    }
 
-        function updateStatus(type, text) {
-            const statusDot = document.getElementById('statusDot');
-            const statusText = document.getElementById('statusText');
-            
-            statusDot.className = 'status-dot';
-            if (type !== 'ready') {
-                statusDot.classList.add(type);
-            }
-            statusText.textContent = text;
-        }
+    // Initialize the application
+    function init() {
+        initDragDrop();
+        // Add event listeners for file upload inputs
+        document.querySelector('#headerUpload input[type="file"]').addEventListener('change', handleFileUpload);
+        document.querySelector('#welcomeUpload input[type="file"]').addEventListener('change', handleFileUpload);
+        // Check server health on load
+        checkServerHealth();
+    }
 
-        function autoResize(textarea) {
-            textarea.style.height = 'auto';
-            textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
-        }
-
-        function handleKeyPress(event) {
-            if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault();
-                sendQuery();
-            }
-        }
-
-        async function sendQuery() {
-            const queryInput = document.getElementById('query');
-            const sendButton = document.getElementById('sendButton');
-            const buttonText = document.getElementById('buttonText');
-            const buttonIcon = document.getElementById('buttonIcon');
-            const message = queryInput.value.trim();
-            
-            if (!message || sendButton.disabled || uploadedFiles.length === 0) return;
-
-            // Show messages container if first message
-            if (isFirstMessage) {
-                document.getElementById('welcomeScreen').style.display = 'none';
-                document.getElementById('messages').style.display = 'flex';
-                isFirstMessage = false;
-            }
-
-            // Disable send button
-            sendButton.disabled = true;
-            buttonText.textContent = 'Sending';
-            buttonIcon.textContent = '⟳';
-            updateStatus('uploading', 'Processing...');
-
-            // Add user message
-            addMessage('user', message);
-            queryInput.value = '';
-            queryInput.style.height = 'auto';
-
-            // Add typing indicator
-            const typingId = addTypingMessage();
-
-            try {
-                const response = await fetch('http://127.0.0.1:5000/ask', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ query: message })
-                });
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
-                }
-                
+    async function checkServerHealth() {
+        try {
+            const response = await fetch('/health');
+            if (response.ok) {
                 const data = await response.json();
-                
-                // Remove typing indicator
-                removeMessage(typingId);
-                
-                // Add assistant response
-                addMessage('assistant', data.answer || 'No response received.');
-                updateStatus('ready', `${uploadedFiles.length} file(s) ready`);
-                
-            } catch (error) {
-                console.error('Error:', error);
-                removeMessage(typingId);
-                addMessage('assistant', '⚠️ Connection failed. Please ensure the server is running at http://127.0.0.1:5000');
-                updateStatus('error', 'Connection failed');
-            } finally {
-                // Re-enable send button
-                sendButton.disabled = false;
-                buttonText.textContent = 'Send';
-                buttonIcon.textContent = '→';
+                updateStatus('ready', 'Server connected');
+            } else {
+                updateStatus('error', 'Server not responding');
             }
+        } catch (error) {
+            updateStatus('error', 'Server offline');
         }
+    }
 
-        function addMessage(type, content) {
-            const messagesContainer = document.getElementById('messages');
-            const messageId = `msg-${++messageCounter}`;
-            
-            const messageDiv = document.createElement('div');
-            messageDiv.className = `message ${type}`;
-            messageDiv.id = messageId;
-            
-            const avatar = document.createElement('div');
-            avatar.className = 'message-avatar';
-            avatar.textContent = type === 'user' ? 'You' : 'AI';
-            
-            const contentDiv = document.createElement('div');
-            contentDiv.className = 'message-content';
-            contentDiv.textContent = content;
-            
-            const timeDiv = document.createElement('div');
-            timeDiv.className = 'message-time';
-            timeDiv.textContent = new Date().toLocaleTimeString([], {
-                hour: '2-digit', 
-                minute: '2-digit'
-            });
-            
-            contentDiv.appendChild(timeDiv);
-            messageDiv.appendChild(avatar);
-            messageDiv.appendChild(contentDiv);
-            messagesContainer.appendChild(messageDiv);
-            
-            // Scroll to bottom
-            document.getElementById('chatContainer').scrollTop = 
-                document.getElementById('chatContainer').scrollHeight;
-            
-            return messageId;
-        }
-
-        function addTypingMessage() {
-            const messagesContainer = document.getElementById('messages');
-            const messageId = `typing-${++messageCounter}`;
-            
-            const messageDiv = document.createElement('div');
-            messageDiv.className = 'message assistant';
-            messageDiv.id = messageId;
-            
-            const avatar = document.createElement('div');
-            avatar.className = 'message-avatar';
-            avatar.textContent = 'AI';
-            
-            const contentDiv = document.createElement('div');
-            contentDiv.className = 'message-content';
-            
-            const typingDiv = document.createElement('div');
-            typingDiv.className = 'typing-container';
-            typingDiv.innerHTML = `
-                <span>Analyzing</span>
-                <div class="typing-dots">
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                </div>
-            `;
-            
-            contentDiv.appendChild(typingDiv);
-            messageDiv.appendChild(avatar);
-            messageDiv.appendChild(contentDiv);
-            messagesContainer.appendChild(messageDiv);
-            
-            // Scroll to bottom
-            document.getElementById('chatContainer').scrollTop = 
-                document.getElementById('chatContainer').scrollHeight;
-            
-            return messageId;
-        }
-
-        function removeMessage(messageId) {
-            const message = document.getElementById(messageId);
-            if (message) {
-                message.remove();
-            }
-        }
-
+    document.addEventListener('DOMContentLoaded', init);
+</script>
