@@ -700,59 +700,84 @@
         handleFiles(files);
     }
 
-    function handleFileUpload(event) {
-        const files = event.target.files;
-        handleFiles(files);
+    let uploading = false;
+
+    async function handleFileUpload(event) {
+        if (uploading) return;   // prevent duplicate trigger
+        uploading = true;
+
+        try {
+            const files = event.target.files;
+            await handleFiles(files);
+        } finally {
+            uploading = false;
+        }
     }
 
-    async function handleFiles(files) {
+
+    async function handleFiles(files) 
+    {
         const statusDot = document.getElementById('statusDot');
         const statusText = document.getElementById('statusText');
         const progressBar = document.getElementById('progressBar');
         const progressFill = document.getElementById('progressFill');
 
-        // Improved PDF file filtering
+        // If a file is already uploaded, block new uploads until removed
+        if (uploadedFiles && uploadedFiles.length > 0) {
+            updateStatus('error', 'A file is already uploaded. Remove it first to upload another.');
+            return;
+        }
+
+        // Pick only PDF files
         const pdfFiles = Array.from(files).filter(file =>
             file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
         );
 
         if (pdfFiles.length === 0) {
-            updateStatus('error', 'Please select PDF files only');
+            updateStatus('error', 'Please select a PDF file');
             return;
         }
 
-        // Show progress bar
+        // Only take the first PDF (single-file behavior)
+        const file = pdfFiles[0];
+
+        // Show progress UI
         progressBar.style.display = 'block';
-        updateStatus('uploading', 'Uploading files...');
+        updateStatus('uploading', 'Uploading file...');
 
-        for (let i = 0; i < pdfFiles.length; i++) {
-            const file = pdfFiles[i];
-            const progress = ((i + 1) / pdfFiles.length) * 100;
-            progressFill.style.width = progress + '%';
+        // simple progress simulate by 1 step (you already update per file earlier)
+        progressFill.style.width = '30%';
 
-            try {
-                await uploadFile(file);
-                uploadedFiles.push({
-                    name: file.name,
-                    size: file.size,
-                    uploadedAt: new Date()
-                });
-            } catch (error) {
-                updateStatus('error', `Failed to upload ${file.name}`);
-                return;
-            }
-        }
 
-        // Hide progress bar and update UI
+
+         try {
+        await uploadFile(file);
+
+        // store single uploaded file meta
+        uploadedFiles = [{
+            name: file.name,
+            size: file.size,
+            uploadedAt: new Date()
+        }];
+
+        // mark progress as done
+        progressFill.style.width = '100%';
+        updateStatus('ready', `${uploadedFiles.length} file ready`);
+        enableChat();
+        updateFileList();
+    } catch (error) {
+        console.error('Upload error:', error);
+        updateStatus('error', `Failed to upload ${file.name}`);
+    } finally {
+        // reset/hide progress after short delay so user sees completion
         setTimeout(() => {
             progressBar.style.display = 'none';
             progressFill.style.width = '0%';
-            updateFileList();
-            enableChat();
-            updateStatus('ready', `${uploadedFiles.length} file(s) ready`);
-        }, 500);
+        }, 600);
     }
+}
 
+    
     async function uploadFile(file) {
         const formData = new FormData();
         formData.append('file', file);
@@ -770,16 +795,19 @@
 
     function updateFileList() {
         const uploadedFilesContainer = document.getElementById('uploadedFiles');
-        if (uploadedFiles.length > 0) {
+
+        if (uploadedFiles && uploadedFiles.length > 0) {
             uploadedFilesContainer.style.display = 'flex';
-            uploadedFilesContainer.innerHTML = uploadedFiles.map((file, index) => `
+            const file = uploadedFiles[0];
+            uploadedFilesContainer.innerHTML = `
                 <div class="file-chip">
                     <span>📄 ${file.name}</span>
-                    <button class="remove-file" onclick="removeFile(${index})">×</button>
+                    <button class="remove-file" onclick="removeFile(0)">×</button>
                 </div>
-            `).join('');
+            `;
         } else {
             uploadedFilesContainer.style.display = 'none';
+            uploadedFilesContainer.innerHTML = '';
         }
     }
 

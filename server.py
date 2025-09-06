@@ -28,6 +28,7 @@ def health():
 # Upload PDF
 @app.route("/upload", methods=["POST"])
 def upload_pdf():
+    print("upload rquest received")
     try:
         if 'file' not in request.files:
             print("No file part in request")
@@ -89,4 +90,5 @@ def ask():
     return jsonify({"answer": answer})
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, use_reloader=False)
+
