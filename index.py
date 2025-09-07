@@ -5,7 +5,7 @@ import os
 from langchain_community.document_loaders import PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
-import pinecone
+from pinecone import Pinecone
 from langchain_pinecone import PineconeVectorStore
 
 import asyncio
@@ -35,25 +35,11 @@ def index_document(PDF_PATH):
         model="text-embedding-004"
     )
 
-    # # --- Step 4: Initialize Pinecone
-    # pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
-    # index_name = os.getenv("PINECONE_INDEX_NAME")
-    # pinecone_index = pc.Index(index_name)   # just a handle
-
-    # # --- Step 5: Push chunks to Pinecone
-    # vectorstore = PineconeVectorStore.from_documents(
-    #     documents=chunked_docs,
-    #     embedding=embeddings,
-    #     index_name=index_name
-    # )
     # --- Step 4: Initialize Pinecone
-    pinecone.init(
-        api_key=os.getenv("PINECONE_API_KEY"),
-        environment=os.getenv("PINECONE_ENVIRONMENT") 
-    )
+    pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
     index_name = os.getenv("PINECONE_INDEX_NAME")
-    pinecone_index = pinecone.Index(index_name)  
-    
+    pinecone_index = pc.Index(index_name)   # just a handle
+
     # --- Step 5: Push chunks to Pinecone
     vectorstore = PineconeVectorStore.from_documents(
         documents=chunked_docs,
