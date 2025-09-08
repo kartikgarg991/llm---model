@@ -21,7 +21,11 @@ def home():
 @app.route("/health")
 def health():
     return jsonify({"status": "ok"})
-
+# Test route
+@app.route("/test")
+def test():
+    return jsonify({"message": "Server working!"})
+    
 # Upload PDF
 @app.route("/upload", methods=["POST"])
 def upload_pdf():
