@@ -3,6 +3,7 @@ load_dotenv()
 from flask import Flask, request, jsonify, render_template
 from werkzeug.utils import secure_filename
 import os
+import traceback
 from index import index_document
 from query import chat, embeddings, pinecone_index, rewrite_query, conversation_history
 
@@ -31,6 +32,12 @@ def upload_pdf():
             return jsonify({"error": "No file"}), 400
 
         file = request.files['file']
+        print(f"File received: {file.filename}")
+        
+        if file.filename == '':
+            print("No file selected")
+            return jsonify({"error": "No file selected"}), 400
+            
         filename = secure_filename(file.filename)
         filepath = os.path.join(UPLOAD_FOLDER, filename)
         file.save(filepath)
@@ -43,7 +50,6 @@ def upload_pdf():
         return jsonify({"success": True, "filename": filename})
     except Exception as e:
         print("Upload error:", e)  # <--- This will show the error in your terminal
-        import traceback
         traceback.print_exc()      # <--- This will print the full traceback
         return jsonify({"error": str(e)}), 500   
 
