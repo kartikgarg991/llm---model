@@ -1,17 +1,24 @@
 from dotenv import load_dotenv
 load_dotenv()
+
 from flask import Flask, request, jsonify, render_template
 from werkzeug.utils import secure_filename
 import os
 import traceback
+import tempfile
+from supabase import create_client
+
 from index import index_document
 from query import chat, embeddings, pinecone_index, rewrite_query, conversation_history
-from io import BytesIO
-import tempfile 
+
+
+
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+
 
 app = Flask(__name__)
-UPLOAD_FOLDER = "uploads"
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # Serve frontend
 @app.route("/")
@@ -40,26 +47,37 @@ def upload_pdf():
             return jsonify({"error": "No file selected"}), 400
 
         filename = secure_filename(file.filename)
-        # filepath = os.path.join(UPLOAD_FOLDER, filename)
-        # file.save(filepath)
-        # print(f"Saved file to {filepath}")
+        file_bytes = file.read()
 
-        # # Index PDF in Pinecone
-        # index_document(filepath)
+         # --- Upload to Supabase Storage (bucket = pdfs)
+        result = supabase.storage.from_("pdfs").upload(filename, file_bytes)
+        print("File uploaded to Supabase successfully")
+
+        # Download back from Supabase
+        pdf_bytes = supabase.storage.from_("pdfs").download(filename)
+        print(f"Downloaded {len(pdf_bytes)} bytes from Supabase")
 
 
-       # Save to a temporary file
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-            tmp.write(file.read())
-            tmp_path = tmp.name
+       # Create temporary file in Render's temp directory
+        temp_file_path = None
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+                tmp.write(pdf_bytes)
+                temp_file_path = tmp.name
+                print(f"Created temp file: {temp_file_path}")
 
-         # Pass temp path to index_document
-        index_document(tmp_path)  # no change inside index.py
+            # Process the file
+            index_document(temp_file_path)
+            print("Indexing complete")
+            
+            return jsonify({"success": True, "filename": filename})
 
-        
-        print("Indexing complete")
-        
-        return jsonify({"success": True, "filename": filename})
+        finally:
+            # Always clean up temp file
+            if temp_file_path and os.path.exists(temp_file_path):
+                os.unlink(temp_file_path)
+                print(f"Cleaned up temp file: {temp_file_path}")
+
     except Exception as e:
         print("Upload error:", e)  # <--- This will show the error in your terminal
         traceback.print_exc()      # <--- This will print the full traceback
