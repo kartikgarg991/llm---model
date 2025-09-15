@@ -9,6 +9,8 @@ pypdf
 python-dotenv
 google-genai 
 
+supabase
+
 PyMuPDF==1.26.0
 requests==2.32.5
 Flask==3.1.2
