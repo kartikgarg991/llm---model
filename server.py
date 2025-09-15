@@ -6,7 +6,8 @@ import os
 import traceback
 from index import index_document
 from query import chat, embeddings, pinecone_index, rewrite_query, conversation_history
-
+from io import BytesIO
+import tempfile 
 
 app = Flask(__name__)
 UPLOAD_FOLDER = "uploads"
@@ -21,11 +22,7 @@ def home():
 @app.route("/health")
 def health():
     return jsonify({"status": "ok"})
-# Test route
-@app.route("/test")
-def test():
-    return jsonify({"message": "Server working!"})
-    
+
 # Upload PDF
 @app.route("/upload", methods=["POST"])
 def upload_pdf():
@@ -41,14 +38,25 @@ def upload_pdf():
         if file.filename == '':
             print("No file selected")
             return jsonify({"error": "No file selected"}), 400
-            
-        filename = secure_filename(file.filename)
-        filepath = os.path.join(UPLOAD_FOLDER, filename)
-        file.save(filepath)
-        print(f"Saved file to {filepath}")
 
-        # Index PDF in Pinecone
-        index_document(filepath)
+        filename = secure_filename(file.filename)
+        # filepath = os.path.join(UPLOAD_FOLDER, filename)
+        # file.save(filepath)
+        # print(f"Saved file to {filepath}")
+
+        # # Index PDF in Pinecone
+        # index_document(filepath)
+
+
+       # Save to a temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+            tmp.write(file.read())
+            tmp_path = tmp.name
+
+         # Pass temp path to index_document
+        index_document(tmp_path)  # no change inside index.py
+
+        
         print("Indexing complete")
         
         return jsonify({"success": True, "filename": filename})
@@ -69,6 +77,11 @@ def ask():
     prev_conv = "\n".join(conversation_history[-5:])
     std_query = rewrite_query(prev_conv, query)
 
+    print( f"Original Query: {query}")
+    print( f"Rewritten Query: {std_query}")
+
+
+
     # Get vector & query Pinecone
     query_vector = embeddings.embed_query(std_query)
     raw_results = pinecone_index.query(vector=query_vector, top_k=10, include_metadata=True)
@@ -79,7 +92,7 @@ def ask():
     else:
         context = "\n\n---\n\n".join([m["metadata"]["text"] for m in matches])
         prompt = f"""
-        You are an instructor who answers only from the given context.
+        "You are an instructor who answers only from the given context. Write the answer in plain text, no headings, no markdown, no formatting."
         
         Previous Conversation (last 5 turns):
         {prev_conv}
@@ -91,6 +104,7 @@ def ask():
         {context}
 
         Answer strictly using ONLY the context above. If not relevant, say 'No relevant content found in the document.'
+        Also make answer in mutiple paragraphs as required so that user can understand. Give answer in proper spacing . Dont respond answer in cluster where the space and paragraph needed .
         """
         answer = chat.send_message(prompt).text
 
