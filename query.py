@@ -21,7 +21,7 @@ chat = client.chats.create(
 # --- 2. Embeddings ---
 embeddings = GoogleGenerativeAIEmbeddings(
     google_api_key=os.getenv("GEMINI_API_KEY"),
-    model="text-embedding-004"
+    model="models/text-embedding-004" 
 )
 
 # --- 3. Pinecone index handle ---
