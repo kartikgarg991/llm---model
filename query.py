@@ -1,7 +1,7 @@
-import os
-from dotenv import load_dotenv
 from google import genai
 from google.genai import types
+import os
+from dotenv import load_dotenv
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from pinecone import Pinecone
 from langchain_pinecone import PineconeVectorStore
@@ -21,7 +21,8 @@ chat = client.chats.create(
 # --- 2. Embeddings ---
 embeddings = GoogleGenerativeAIEmbeddings(
     google_api_key=os.getenv("GEMINI_API_KEY"),
-    model="models/text-embedding-004" 
+    model="gemini-embedding-001",
+    output_dimensionality=768
 )
 
 # --- 3. Pinecone index handle ---

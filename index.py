@@ -36,7 +36,8 @@ def index_document(file_path: str):
         # Step 3: Embeddings
         embeddings = GoogleGenerativeAIEmbeddings(
             google_api_key=os.getenv("GEMINI_API_KEY"),
-            model="models/text-embedding-004" 
+            model="gemini-embedding-001",
+            output_dimensionality=768
         )
 
         # Step 4: Initialize Pinecone
