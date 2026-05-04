@@ -597,7 +597,8 @@
             <span>📁</span>
             <span>Upload PDF</span>
             <!-- Added name="file" and onchange handler -->
-            <input type="file" accept=".pdf" name="file" onchange="handleFileUpload(event)">
+            <input type="file" accept=".pdf,.docx,.txt,.csv,.pptx,.xlsx"
+ name="file" onchange="handleFileUpload(event)">
         </div>
             
             <div class="status-bar">
@@ -623,7 +624,8 @@
                 
                 <div class="welcome-upload" id="welcomeUpload">
     <!-- Added name="file" and onchange handler -->
-            <input type="file" accept=".pdf" name="file" onchange="handleFileUpload(event)">
+            <input type="file" accept=".pdf,.docx,.txt,.csv,.pptx,.xlsx"
+ name="file" onchange="handleFileUpload(event)">
             <div class="upload-content">
                 <div class="upload-icon">⬆️</div>
                 <div class="upload-text">Drop PDF files here</div>
@@ -663,7 +665,7 @@
     let messageCounter = 0;
     let isFirstMessage = true;
     let uploadedFiles = [];
-    let sessionId = null;
+    let sessionId = crypto.randomUUID()
 
     // Initialize drag and drop
     function initDragDrop() {
@@ -728,18 +730,20 @@
             return;
         }
 
-        // Pick only PDF files
-        const pdfFiles = Array.from(files).filter(file =>
-            file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')
-        );
+        // Pick only supported files
+        const allowedExtensions = ['.pdf', '.docx', '.txt', '.csv', '.pptx', '.xlsx'];
+        const validFiles = Array.from(files).filter(file => {
+            const fileName = file.name.toLowerCase();
+            return allowedExtensions.some(ext => fileName.endsWith(ext));
+        });
 
-        if (pdfFiles.length === 0) {
-            updateStatus('error', 'Please select a PDF file');
+        if (validFiles.length === 0) {
+            updateStatus('error', 'Please select a supported file (.pdf, .docx, .txt, .csv, .pptx, .xlsx)');
             return;
         }
 
-        // Only take the first PDF (single-file behavior)
-        const file = pdfFiles[0];
+        // Only take the first valid file
+        const file = validFiles[0];
 
         // Show progress UI
         progressBar.style.display = 'block';
@@ -781,6 +785,7 @@
     async function uploadFile(file) {
         const formData = new FormData();
         formData.append('file', file);
+        formData.append('session_id', sessionId);
         const response = await fetch('/upload', {
             method: 'POST',
             body: formData
@@ -895,10 +900,7 @@
         const typingId = addTypingMessage();
 
         try {
-            const requestBody = { query: message };
-            if (sessionId) {
-                requestBody.session_id = sessionId;
-            }
+            const requestBody = { query: message, session_id: sessionId };
             const response = await fetch('/ask', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

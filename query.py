@@ -25,15 +25,13 @@ embeddings = GoogleGenerativeAIEmbeddings(
     output_dimensionality=768
 )
 
+
 # --- 3. Pinecone index handle ---
 
 pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
 index_name = os.getenv("PINECONE_INDEX_NAME")
 pinecone_index = pc.Index(index_name) 
-vectorstore = PineconeVectorStore.from_existing_index(
-        embedding=embeddings,
-        index_name=index_name
-    )
+
 
 # --- 4. Conversation memory ---
 conversation_history = []
@@ -59,3 +57,22 @@ def rewrite_query(history, query):
     """
     response = chat.send_message(prompt)
     return response.text.strip()
+
+def search_context(session_id, query):
+    # 1. Generate embedding for the query
+    query_vector = embeddings.embed_query(query)
+    
+    # 2. Query Pinecone with the session_id as the namespace
+    raw_results = pinecone_index.query(
+        vector=query_vector, 
+        top_k=10, 
+        include_metadata=True,
+        namespace=session_id  # <--- Crucial for Step 3
+    )
+    
+    matches = raw_results["matches"]
+    if not matches:
+        return None
+        
+    # 3. Join the text chunks into a single context string
+    return "\n\n---\n\n".join([m["metadata"]["text"] for m in matches])

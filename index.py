@@ -4,13 +4,36 @@ load_dotenv()
 import os
 import asyncio
 
-from langchain_community.document_loaders import PyPDFLoader
+from langchain_community.document_loaders import (
+    PyPDFLoader,
+    Docx2txtLoader,
+    TextLoader,
+    UnstructuredPowerPointLoader,
+    CSVLoader,
+    UnstructuredExcelLoader,
+)
+
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from pinecone import Pinecone
 from langchain_pinecone import PineconeVectorStore
 
-def index_document(file_path: str):
+def get_loader(file_path: str):
+    ext = file_path.rsplit(".", 1)[-1].lower()
+    loaders = {
+        "pdf":  PyPDFLoader,
+        "docx": Docx2txtLoader,
+        "txt":  TextLoader,
+        "csv":  CSVLoader,
+        "pptx": UnstructuredPowerPointLoader,
+        "xlsx": UnstructuredExcelLoader,
+    }
+    if ext not in loaders:
+        raise ValueError(f"Unsupported file type: .{ext}")
+    return loaders[ext](file_path)
+
+
+def index_document(file_path: str, session_id: str):
     print(f"Starting to index document: {file_path}")
     
     try:
@@ -21,7 +44,7 @@ def index_document(file_path: str):
 
     try:
         # Step 1: Load PDF from file path
-        loader = PyPDFLoader(file_path)
+        loader = get_loader(file_path)
         raw_docs = loader.load()
         print(f"Total documents extracted: {len(raw_docs)}")
 
@@ -40,6 +63,7 @@ def index_document(file_path: str):
             output_dimensionality=768
         )
 
+
         # Step 4: Initialize Pinecone
         pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
         index_name = os.getenv("PINECONE_INDEX_NAME")
@@ -48,7 +72,8 @@ def index_document(file_path: str):
         vectorstore = PineconeVectorStore.from_documents(
             documents=chunked_docs,
             embedding=embeddings,
-            index_name=index_name
+            index_name=index_name,  
+            namespace=session_id
         )
 
         print(f"✅ Successfully indexed {len(chunked_docs)} chunks in Pinecone")

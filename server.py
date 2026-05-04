@@ -6,9 +6,13 @@ from werkzeug.utils import secure_filename
 import os
 import traceback
 import tempfile
-
+import time
+import threading 
 from index import index_document
-from query import chat, embeddings, pinecone_index, rewrite_query, conversation_history
+from query import chat, embeddings, pinecone_index, rewrite_query, conversation_history , search_context
+
+session_registry = {}
+SESSION_TTL_HOURS = 2
 
 app = Flask(__name__)
 
@@ -22,6 +26,13 @@ def health():
 
 @app.route("/upload", methods=["POST"])
 def upload_pdf():
+    session_id = request.form.get("session_id")
+    if not session_id:
+        return jsonify({"error": "No session_id"}), 400
+
+    session_registry[session_id] = time.time() 
+
+
     try:
         if 'file' not in request.files:
             return jsonify({"error": "No file"}), 400
@@ -35,11 +46,12 @@ def upload_pdf():
 
         temp_file_path = None
         try:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+            ext = os.path.splitext(secure_filename(file.filename))[1]  # gets .docx, .txt etc
+            with tempfile.NamedTemporaryFile(delete=False, suffix=ext) as tmp:
                 tmp.write(file_bytes)
                 temp_file_path = tmp.name
 
-            index_document(temp_file_path)  # ✅ Pinecone mein index
+            index_document(temp_file_path, session_id)  # ✅ Pinecone mein index
 
             return jsonify({"success": True, "filename": filename})
 
@@ -54,6 +66,11 @@ def upload_pdf():
 @app.route("/ask", methods=["POST"])
 def ask():
     data = request.json
+    session_id = data.get("session_id")
+    if not session_id:
+        return jsonify({"error": "No session_id"}), 400
+        
+    session_registry[session_id] = time.time()
     query = data.get("query")
     if not query:
         return jsonify({"error": "No query"}), 400
@@ -61,14 +78,15 @@ def ask():
     prev_conv = "\n".join(conversation_history[-5:])
     std_query = rewrite_query(prev_conv, query)
 
-    query_vector = embeddings.embed_query(std_query)
-    raw_results = pinecone_index.query(vector=query_vector, top_k=10, include_metadata=True)
-    matches = raw_results["matches"]
+    # query_vector = embeddings.embed_query(std_query)
+    # raw_results = pinecone_index.query(vector=query_vector, top_k=10, include_metadata=True)
+    # matches = raw_results["matches"]
 
-    if not matches:
+    context = search_context(session_id, std_query)
+    
+    if not context:
         answer = "Sorry, I couldn't find anything in the document for that query."
     else:
-        context = "\n\n---\n\n".join([m["metadata"]["text"] for m in matches])
         prompt = f"""
         You are an instructor who answers only from the given context.
         
@@ -87,6 +105,30 @@ def ask():
     conversation_history[:] = conversation_history[-5:]
 
     return jsonify({"answer": answer})
+
+
+def cleanup_old_namespaces():
+    from pinecone import Pinecone # Import inside thread to avoid issues
+    while True:
+        time.sleep(3600)  # check every hour
+        now = time.time()
+        pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+        index = pc.Index(os.getenv("PINECONE_INDEX_NAME"))
+        
+        expired = [
+            sid for sid, last_active in session_registry.items()
+            if now - last_active > SESSION_TTL_HOURS * 3600
+        ]
+        for sid in expired:
+            try:
+                index.delete(delete_all=True, namespace=sid)
+                del session_registry[sid]
+                print(f"Cleaned up namespace: {sid}")
+            except Exception as e:
+                print(f"Failed to cleanup namespace {sid}: {e}")
+
+threading.Thread(target=cleanup_old_namespaces, daemon=True).start()
+
 
 if __name__ == "__main__":
     app.run(debug=True, use_reloader=False)
