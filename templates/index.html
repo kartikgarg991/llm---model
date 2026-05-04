@@ -908,7 +908,13 @@
             });
 
             if (!response.ok) {
-                const errorData = await response.json();
+                const responseText = await response.text();
+                let errorData = {};
+                try {
+                    errorData = JSON.parse(responseText);
+                } catch (parseError) {
+                    errorData = { error: `Server error (${response.status}). Please try again later.` };
+                }
                 throw new Error(errorData.error || `HTTP ${response.status}`);
             }
 

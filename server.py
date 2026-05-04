@@ -65,46 +65,50 @@ def upload_pdf():
 
 @app.route("/ask", methods=["POST"])
 def ask():
-    data = request.json
-    session_id = data.get("session_id")
-    if not session_id:
-        return jsonify({"error": "No session_id"}), 400
+    try:
+        data = request.json
+        session_id = data.get("session_id")
+        if not session_id:
+            return jsonify({"error": "No session_id"}), 400
+            
+        session_registry[session_id] = time.time()
+        query = data.get("query")
+        if not query:
+            return jsonify({"error": "No query"}), 400
+
+        prev_conv = "\n".join(conversation_history[-5:])
+        std_query = rewrite_query(prev_conv, query)
+
+        context = search_context(session_id, std_query)
         
-    session_registry[session_id] = time.time()
-    query = data.get("query")
-    if not query:
-        return jsonify({"error": "No query"}), 400
+        if not context:
+            answer = "Sorry, I couldn't find anything in the document for that query."
+        else:
+            prompt = f"""
+            You are an instructor who answers only from the given context.
+            
+            Previous Conversation:
+            {prev_conv}
 
-    prev_conv = "\n".join(conversation_history[-5:])
-    std_query = rewrite_query(prev_conv, query)
+            User Query: {std_query}
 
-    # query_vector = embeddings.embed_query(std_query)
-    # raw_results = pinecone_index.query(vector=query_vector, top_k=10, include_metadata=True)
-    # matches = raw_results["matches"]
+            Context: {context}
 
-    context = search_context(session_id, std_query)
-    
-    if not context:
-        answer = "Sorry, I couldn't find anything in the document for that query."
-    else:
-        prompt = f"""
-        You are an instructor who answers only from the given context.
-        
-        Previous Conversation:
-        {prev_conv}
+            Answer strictly using ONLY the context above.
+            """
+            answer = chat.send_message(prompt).text
 
-        User Query: {std_query}
+        conversation_history.append(f"User: {query}\nAssistant: {answer}")
+        conversation_history[:] = conversation_history[-5:]
 
-        Context: {context}
+        return jsonify({"answer": answer})
 
-        Answer strictly using ONLY the context above.
-        """
-        answer = chat.send_message(prompt).text
-
-    conversation_history.append(f"User: {query}\nAssistant: {answer}")
-    conversation_history[:] = conversation_history[-5:]
-
-    return jsonify({"answer": answer})
+    except Exception as e:
+        traceback.print_exc()
+        error_text = str(e)
+        if "429" in error_text or "RESOURCE_EXHAUSTED" in error_text or "quota" in error_text.lower():
+            return jsonify({"error": "Gemini API limit exhausted. Please try again after some time."}), 429
+        return jsonify({"error": error_text}), 500
 
 
 def cleanup_old_namespaces():
