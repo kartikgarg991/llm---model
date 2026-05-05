@@ -95,6 +95,15 @@ def ask():
             Context: {context}
 
             Answer strictly using ONLY the context above.
+            Format the answer clearly using Markdown:
+            - If multiple facts are present, use bullet points.
+            - Put each important fact on a separate line.
+            - Use bold Markdown section headings when helpful.
+            - If exact URLs are present in the context, format them as Markdown links.
+            - If only link labels are present and exact URLs are missing, mention the labels as plain text.
+            - Do not invent or guess URLs.
+            - Keep short answers concise.
+            - Do not write one long paragraph when listing details.
             """
             answer = chat.send_message(prompt).text
 
