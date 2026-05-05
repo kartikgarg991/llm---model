@@ -9,10 +9,8 @@ import tempfile
 import time
 import threading 
 from index import index_document
-from query import chat, embeddings, pinecone_index, rewrite_query, conversation_history , search_context
-
-session_registry = {}
-SESSION_TTL_HOURS = 2
+from query import chat, rewrite_query, search_context
+from session_store import clear_session, get_expired_sessions, get_history, save_history, touch_session
 
 app = Flask(__name__)
 
@@ -30,7 +28,7 @@ def upload_pdf():
     if not session_id:
         return jsonify({"error": "No session_id"}), 400
 
-    session_registry[session_id] = time.time() 
+    touch_session(session_id)
 
 
     try:
@@ -71,12 +69,19 @@ def ask():
         if not session_id:
             return jsonify({"error": "No session_id"}), 400
             
-        session_registry[session_id] = time.time()
+        touch_session(session_id)
         query = data.get("query")
         if not query:
             return jsonify({"error": "No query"}), 400
 
-        prev_conv = "\n".join(conversation_history[-5:])
+        history = get_history(session_id)
+        prev_conv = "\n".join([
+            f"User: {turn['user']}\nAssistant: {turn['assistant']}"
+            for turn in history
+        ])
+        print(f"[DEBUG] Session ID: {session_id}")
+        print(f"[DEBUG] History for this session: {history}")
+        print(f"[DEBUG] Previous conversation passed to rewriter:\n{prev_conv}")
         std_query = rewrite_query(prev_conv, query)
 
         context = search_context(session_id, std_query)
@@ -107,8 +112,8 @@ def ask():
             """
             answer = chat.send_message(prompt).text
 
-        conversation_history.append(f"User: {query}\nAssistant: {answer}")
-        conversation_history[:] = conversation_history[-5:]
+        history.append({"user": query, "assistant": answer})
+        save_history(session_id, history)
 
         return jsonify({"answer": answer})
 
@@ -124,18 +129,14 @@ def cleanup_old_namespaces():
     from pinecone import Pinecone # Import inside thread to avoid issues
     while True:
         time.sleep(3600)  # check every hour
-        now = time.time()
         pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
         index = pc.Index(os.getenv("PINECONE_INDEX_NAME"))
         
-        expired = [
-            sid for sid, last_active in session_registry.items()
-            if now - last_active > SESSION_TTL_HOURS * 3600
-        ]
+        expired = get_expired_sessions()
         for sid in expired:
             try:
                 index.delete(delete_all=True, namespace=sid)
-                del session_registry[sid]
+                clear_session(sid)
                 print(f"Cleaned up namespace: {sid}")
             except Exception as e:
                 print(f"Failed to cleanup namespace {sid}: {e}")
