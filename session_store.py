@@ -4,6 +4,7 @@ load_dotenv()
 import json
 import os
 import time
+from datetime import datetime, timedelta, timezone
 
 import redis
 
@@ -11,6 +12,7 @@ import redis
 SESSION_TTL_SECONDS = int(os.getenv("SESSION_TTL_SECONDS", "7200"))
 ACTIVE_SESSIONS_KEY = "active_sessions"
 CLEANUP_COOLDOWN_KEY = "cleanup:last_run"
+IST = timezone(timedelta(hours=5, minutes=30))
 _client = None
 
 
@@ -90,8 +92,8 @@ def get_expired_sessions(limit=100):
 
 def mark_cleanup_if_due(cooldown_seconds):
     client = _get_client()
-    now = int(time.time())
-    return bool(client.set(CLEANUP_COOLDOWN_KEY, str(now), ex=cooldown_seconds, nx=True))
+    readable_time = datetime.now(IST).strftime("%d-%m-%Y %H:%M:%S IST")
+    return bool(client.set(CLEANUP_COOLDOWN_KEY, readable_time, ex=cooldown_seconds, nx=True))
 
 
 def clear_session(session_id):
