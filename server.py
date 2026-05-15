@@ -6,16 +6,59 @@ from werkzeug.utils import secure_filename
 import os
 import traceback
 import tempfile
-import time
 import threading 
 from index import index_document
 from query import chat, rewrite_query, search_context
-from session_store import clear_session, get_expired_sessions, get_history, save_history, touch_session
+from session_store import clear_session, get_expired_sessions, get_history, mark_cleanup_if_due, save_history, touch_session
 
 app = Flask(__name__)
 
+CLEANUP_COOLDOWN_SECONDS = int(os.getenv("CLEANUP_COOLDOWN_SECONDS", "3600"))
+_cleanup_lock = threading.Lock()
+
+
+def cleanup_expired_namespaces():
+    from pinecone import Pinecone
+
+    pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+    index = pc.Index(os.getenv("PINECONE_INDEX_NAME"))
+
+    expired = get_expired_sessions()
+    for sid in expired:
+        try:
+            index.delete(delete_all=True, namespace=sid)
+            clear_session(sid)
+            print(f"Cleaned up namespace: {sid}")
+        except Exception as e:
+            print(f"Failed to cleanup namespace {sid}: {e}")
+
+
+def run_cleanup_job():
+    if not _cleanup_lock.acquire(blocking=False):
+        return
+
+    try:
+        cleanup_expired_namespaces()
+    except Exception as e:
+        print(f"Cleanup failed: {e}")
+    finally:
+        _cleanup_lock.release()
+
+
+def trigger_cleanup_from_homepage():
+    try:
+        if not mark_cleanup_if_due(CLEANUP_COOLDOWN_SECONDS):
+            return
+    except Exception as e:
+        print(f"Could not schedule cleanup: {e}")
+        return
+
+    threading.Thread(target=run_cleanup_job, daemon=True).start()
+
+
 @app.route("/")
 def home():
+    trigger_cleanup_from_homepage()
     return render_template("index.html")
 
 @app.route("/health")
@@ -123,26 +166,6 @@ def ask():
         if "429" in error_text or "RESOURCE_EXHAUSTED" in error_text or "quota" in error_text.lower():
             return jsonify({"error": "Gemini API limit exhausted. Please try again after some time."}), 429
         return jsonify({"error": error_text}), 500
-
-
-def cleanup_old_namespaces():
-    from pinecone import Pinecone # Import inside thread to avoid issues
-    while True:
-        time.sleep(3600)  # check every hour
-        pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
-        index = pc.Index(os.getenv("PINECONE_INDEX_NAME"))
-        
-        expired = get_expired_sessions()
-        for sid in expired:
-            try:
-                index.delete(delete_all=True, namespace=sid)
-                clear_session(sid)
-                print(f"Cleaned up namespace: {sid}")
-            except Exception as e:
-                print(f"Failed to cleanup namespace {sid}: {e}")
-
-threading.Thread(target=cleanup_old_namespaces, daemon=True).start()
-
 
 if __name__ == "__main__":
     app.run(debug=True, use_reloader=False)

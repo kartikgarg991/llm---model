@@ -10,6 +10,7 @@ import redis
 
 SESSION_TTL_SECONDS = int(os.getenv("SESSION_TTL_SECONDS", "7200"))
 ACTIVE_SESSIONS_KEY = "active_sessions"
+CLEANUP_COOLDOWN_KEY = "cleanup:last_run"
 _client = None
 
 
@@ -85,6 +86,12 @@ def get_expired_sessions(limit=100):
     client = _get_client()
     now = int(time.time())
     return client.zrangebyscore(ACTIVE_SESSIONS_KEY, "-inf", now, start=0, num=limit)
+
+
+def mark_cleanup_if_due(cooldown_seconds):
+    client = _get_client()
+    now = int(time.time())
+    return bool(client.set(CLEANUP_COOLDOWN_KEY, str(now), ex=cooldown_seconds, nx=True))
 
 
 def clear_session(session_id):
