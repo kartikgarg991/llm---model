@@ -56,8 +56,14 @@ def touch_session(session_id):
     client = _get_client()
     now = int(time.time())
     expires_at = now + SESSION_TTL_SECONDS
+    session_info = {
+        "last_active_at": now,
+        "last_active_at_ist": datetime.fromtimestamp(now, IST).strftime("%d-%m-%Y %H:%M:%S IST"),
+        "expires_at": expires_at,
+        "expires_at_ist": datetime.fromtimestamp(expires_at, IST).strftime("%d-%m-%Y %H:%M:%S IST"),
+    }
 
-    client.set(_session_key(session_id), str(now), ex=SESSION_TTL_SECONDS)
+    client.set(_session_key(session_id), json.dumps(session_info), ex=SESSION_TTL_SECONDS)
     if client.exists(_chat_key(session_id)):
         client.expire(_chat_key(session_id), SESSION_TTL_SECONDS)
     client.zadd(ACTIVE_SESSIONS_KEY, {session_id: expires_at})
